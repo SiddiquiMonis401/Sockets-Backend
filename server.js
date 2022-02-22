@@ -9,12 +9,46 @@ const { createServer} = require('http');
 
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const multer = require('multer');
 
+const storage = multer.diskStorage({
+    destination: (req,file,cb) => {
+        cb(null, './user_profile');
+    },
+    filename: (req, file, cb) => {
+        const fileUniquiName = file.originalname.split(' ').join('_');
+        cb(null,fileUniquiName);
+    }
+})
+
+const upload = multer({storage: storage});
 
 // Middlewares
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json({ extended: true }));
+
+
+// console.log(userimages);
+
+// app.use('/static', express.static(userimages + '/'));
+app.get('/images/:imageName', (req,res,next) => {
+    console.log('req', req);
+    const userimages = path.join(__dirname, 'user_profile', req?.params?.imageName);
+    res.sendFile(userimages)
+});
+
+app.post('/user_profile', (req,res,next) => {
+    upload.single('userprofile')(req,res, (err) => {
+        if(err) {
+            res.send('An unexpected error occured!!');
+            return;
+        }
+        res.status(201).json({data: req.file});
+    })
+});
+
+let rooms = [];
 
 // Server
 const server = createServer(app);
@@ -38,9 +72,11 @@ io.on('connection', (socket) => {
     
     socket.emit('add_rooms_to_list', rooms);
 
-    socket.emit('on_connection', "You have been connected to socket!");
+    rooms.map(room => {
+        socket.join(room);
+    })
 
-    console.log('socket_id', socket.id);
+    socket.emit('on_connection', "You have been connected to socket!");
 
     socket.on('create', function(room) {
         rooms.push(room);
@@ -48,9 +84,8 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('room_created', room);
     })
 
-    socket.on('new_message_from_client', ({ msg, room }) => {
-        console.log('new msg from client', msg, room);
-        socket.to(room).emit('new_message_from_server', {msg, room});
+    socket.on('new_message_from_client', ({ msg, room, username }) => {
+        socket.to(room).emit('new_message_from_server', {msg, room, username});
     })
 
     socket.on('join_room', (room) => {
